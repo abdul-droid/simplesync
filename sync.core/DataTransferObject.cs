@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace sync.server.Model
+namespace sync.core
 {
     public class DataTransferObject
     {
@@ -10,5 +10,6 @@ namespace sync.server.Model
         public string TableData { get; set; }
         public DateTime SyncDateTime { get; set; }
         public int RowsToSyncPerTime { get; set; }
+
     }
 }

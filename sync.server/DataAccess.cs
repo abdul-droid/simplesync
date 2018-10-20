@@ -6,95 +6,95 @@ using System.Text;
 
 namespace sync.server
 {
-    public class DataAccess
+    internal class DataAccess
     {
         private static string MSSQL_CONN_STR = ConfigurationManager.ConnectionStrings["SqlServerConnectionString"].ConnectionString;
 
-        public DataTable SyncDataFromClientToServer(string sproc, DataTable dt)
+        public DataTable UpdateServerData(string StoredProcedure, DataTable DataTable)
         {
-            DataTable r = new DataTable();
-            using (SqlConnection sqlconn = new SqlConnection(MSSQL_CONN_STR))
+            DataTable dataTable = new DataTable();
+            using (SqlConnection sqlConn = new SqlConnection(MSSQL_CONN_STR))
             {
                 try
                 {
                     using (
-                        SqlCommand sqlCmd = new SqlCommand(sproc, sqlconn)
+                        SqlCommand sqlCmd = new SqlCommand(StoredProcedure, sqlConn)
                         {
                             CommandType = CommandType.StoredProcedure
                         })
                     {
-                        if (sqlconn.State == ConnectionState.Closed)
+                        if (sqlConn.State == ConnectionState.Closed)
                         {
-                            sqlconn.Open();
+                            sqlConn.Open();
                         }
 
                         sqlCmd.Parameters.Clear();
-                        sqlCmd.Parameters.Add("@Table", SqlDbType.Structured).Value = dt;
+                        sqlCmd.Parameters.Add("@Table", SqlDbType.Structured).Value = DataTable;
 
                         using (SqlDataAdapter da = new SqlDataAdapter(sqlCmd))
                         {
-                            using (DataTable _dt = new DataTable())
+                            using (DataTable dt = new DataTable())
                             {
-                                da.Fill(_dt);
-                                r = _dt;
+                                da.Fill(dt);
+                                dataTable = dt;
                             }
                         }
 
-                        return r;
+                        return dataTable;
                     }
                 }
                 catch (SqlException x)
                 {
-                    for (int i = 0; i < dt.Rows.Count; i++)
+                    for (int i = 0; i < DataTable.Rows.Count; i++)
                     {
-                        dt.Rows[i]["IsSynchronized"] = false;
+                        DataTable.Rows[i]["IsSynchronized"] = false;
                     }
-                    return dt;
+                    return DataTable;
                 }
                 finally
                 {
-                    if (sqlconn.State == ConnectionState.Open)
+                    if (sqlConn.State == ConnectionState.Open)
                     {
-                        sqlconn.Close();
+                        sqlConn.Close();
                     }
                 }
             }
         }
 
-        public DataTable GetTableStructure(string tableName)
+        public DataTable GetTableColumns(string TableName)
         {
-            StringBuilder s = new StringBuilder();
-            s.Append("select top 1 * from ");
-            s.Append(tableName);
+            StringBuilder sqlQuery = new StringBuilder();
+            sqlQuery.Append("select top 1 * from ");
+            sqlQuery.Append(TableName);
 
-            DataTable r = new DataTable();
-            using (SqlConnection sqlconn = new SqlConnection(MSSQL_CONN_STR))
+            DataTable dataTable = new DataTable(TableName);
+            using (SqlConnection sqlConn = new SqlConnection(MSSQL_CONN_STR))
             {
                 try
                 {
                     using (
-                        SqlCommand sqlCmd = new SqlCommand(s.ToString(), sqlconn)
+                        SqlCommand sqlCmd = new SqlCommand(sqlQuery.ToString(), sqlConn)
                         {
                             CommandType = CommandType.Text
                         })
                     {
-                        if (sqlconn.State == ConnectionState.Closed)
+                        if (sqlConn.State == ConnectionState.Closed)
                         {
-                            sqlconn.Open();
+                            sqlConn.Open();
                         }
 
                         sqlCmd.Parameters.Clear();
 
                         using (SqlDataAdapter da = new SqlDataAdapter(sqlCmd))
                         {
-                            using (DataTable _dt = new DataTable())
+                            using (DataTable dt = new DataTable())
                             {
-                                da.Fill(_dt);
-                                r = _dt;
+                                da.Fill(dt);
+                                dataTable = dt;
                             }
                         }
-                        r.Rows.Clear();
-                        return r;
+                        dataTable.Rows.Clear();
+                        return dataTable;
                     }
                 }
                 catch (SqlException x)
@@ -103,52 +103,52 @@ namespace sync.server
                 }
                 finally
                 {
-                    if (sqlconn.State == ConnectionState.Open)
+                    if (sqlConn.State == ConnectionState.Open)
                     {
-                        sqlconn.Close();
+                        sqlConn.Close();
                     }
                 }
             }
         }
 
-        public DataTable GetServerTableData(string tableName, DateTime lastUpdatedDateTime, int TopRows)
+        public DataTable GetServerData(string TableName, DateTime LastUpdatedDateTime, int TopRows)
         {
-            StringBuilder s = new StringBuilder();
-            s.Append("select top ");
-            s.Append(TopRows);
-            s.Append(" * from ");
-            s.Append(tableName);
-            s.Append(" where  SyncDateTime >= '");
-            s.Append(lastUpdatedDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            s.Append("' ");
+            StringBuilder sqlQuery = new StringBuilder();
+            sqlQuery.Append("select top ");
+            sqlQuery.Append(TopRows);
+            sqlQuery.Append(" * from ");
+            sqlQuery.Append(TableName);
+            sqlQuery.Append(" where  SyncDateTime >= '");
+            sqlQuery.Append(LastUpdatedDateTime.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            sqlQuery.Append("' ");
 
-            DataTable r = new DataTable();
-            using (SqlConnection sqlconn = new SqlConnection(MSSQL_CONN_STR))
+            DataTable dataTable = new DataTable(TableName);
+            using (SqlConnection sqlConn = new SqlConnection(MSSQL_CONN_STR))
             {
                 try
                 {
                     using (
-                        SqlCommand sqlCmd = new SqlCommand(s.ToString(), sqlconn)
+                        SqlCommand sqlCmd = new SqlCommand(sqlQuery.ToString(), sqlConn)
                         {
                             CommandType = CommandType.Text
                         })
                     {
-                        if (sqlconn.State == ConnectionState.Closed)
+                        if (sqlConn.State == ConnectionState.Closed)
                         {
-                            sqlconn.Open();
+                            sqlConn.Open();
                         }
 
                         sqlCmd.Parameters.Clear();
 
                         using (SqlDataAdapter da = new SqlDataAdapter(sqlCmd))
                         {
-                            using (DataTable _dt = new DataTable())
+                            using (DataTable dt = new DataTable())
                             {
-                                da.Fill(_dt);
-                                r = _dt;
+                                da.Fill(dt);
+                                dataTable = dt;
                             }
                         }
-                        return r;
+                        return dataTable;
                     }
                 }
                 catch (SqlException x)
@@ -157,13 +157,12 @@ namespace sync.server
                 }
                 finally
                 {
-                    if (sqlconn.State == ConnectionState.Open)
+                    if (sqlConn.State == ConnectionState.Open)
                     {
-                        sqlconn.Close();
+                        sqlConn.Close();
                     }
                 }
             }
         }
-
     }
 }

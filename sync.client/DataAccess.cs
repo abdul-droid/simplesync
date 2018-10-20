@@ -184,7 +184,7 @@ namespace sync.client
                         s.Append(" set IsSynchronized = 1");
                         s.Append(" where SyncGuid = ");
                         s.Append("'");
-                        s.Append(SyncGuidAndRowVersions[i].SynGuid);
+                        s.Append(SyncGuidAndRowVersions[i].SyncGuid);
                         s.Append("'");
 
                         if (SyncGuidAndRowVersions[i].RowVersion == string.Empty)
@@ -256,7 +256,7 @@ namespace sync.client
                         s.Append(" set IsSynchronized = 1");
                         s.Append(" where SyncGuid = ");
                         s.Append("'");
-                        s.Append(SyncGuidAndRowVersions[i].SynGuid);
+                        s.Append(SyncGuidAndRowVersions[i].SyncGuid);
                         s.Append("'");
 
                         try
