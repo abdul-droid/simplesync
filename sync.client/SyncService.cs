@@ -1,11 +1,11 @@
 ﻿
 using Newtonsoft.Json;
+using sync.core;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.Http;
 using System.ServiceProcess;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Timers;
 
@@ -13,7 +13,7 @@ namespace sync.client
 {
     public partial class SyncService : ServiceBase
     {
-        private System.Timers.Timer _timer = null;
+        private Timer _timer = null;
         JsonSerializerSettings _jsonSerializerSettings = new JsonSerializerSettings();
         List<TableRow> ClientTableRows;
         List<TableRow> TableRowsFromServerResponse;
@@ -29,7 +29,7 @@ namespace sync.client
             _jsonSerializerSettings.StringEscapeHandling = StringEscapeHandling.EscapeNonAscii;
 
             AppConfig.Configure();
-            _timer = new System.Timers.Timer();
+            _timer = new Timer();
             _timer.Interval = AppConfig.TimerInterval;
             _timer.Elapsed += Timer_Elapsed;
         }
@@ -117,7 +117,7 @@ namespace sync.client
 
             if (dtos.Count > 0)
             {
-                dtos_ClientToServer = dtos.FindAll(x => x.DirectionId == 1);
+                dtos_ClientToServer = dtos.FindAll(x => x.DirectionId == (int)SyncDirection.ClientToServer);
                 for (int i = 0; i < dtos_ClientToServer.Count; i++)
                 {
                     SyncClientToServer(dtos_ClientToServer[i]);
@@ -150,7 +150,7 @@ namespace sync.client
 
                 request_dto.TableData = JsonConvert.SerializeObject(request_dataTable, _jsonSerializerSettings);
 
-                var postTask = client.PostAsJsonAsync<DataTransferObject>(AppConfig.RequestUri, request_dto);
+                var postTask = client.PostAsJsonAsync(AppConfig.RequestUri, request_dto);
                 postTask.Wait();
 
                 var result = postTask.Result;
@@ -187,14 +187,7 @@ namespace sync.client
                         }
                     }
 
-                    dynamic dynObj = JsonConvert.DeserializeObject(response_dto.TableData, _jsonSerializerSettings);
-
-                    if (dynObj == null)
-                    {
-                        return;
-                    }
-
-                    response_dataTable = JSONToDataTable(dynObj, response_dataTable);
+                    response_dataTable = response_dto.TableData.ConvertToDataTable(response_dataTable);
 
                     if (ByteArrayColumns.Count > 0)
                     {
@@ -227,22 +220,7 @@ namespace sync.client
 
                     if (response_dataTable != null && response_dataTable.Rows.Count > 0)
                     {
-                        for (int i = 0; i < response_dataTable.Columns.Count; i++)
-                        {
-                            if (response_dataTable.Columns[i].DataType == System.Type.GetType("System.String")
-                                || response_dataTable.Columns[i].DataType == System.Type.GetType("System.Char"))
-                            {
-                                for (int j = 0; j < response_dataTable.Rows.Count; j++)
-                                {
-                                    if (response_dataTable.Rows[j][response_dataTable.Columns[i].ColumnName] != DBNull.Value)
-                                    {
-                                        response_dataTable.Rows[j][response_dataTable.Columns[i].ColumnName] = ClearSlashes(response_dataTable.Rows[j][response_dataTable.Columns[i].ColumnName].ToString().Trim());
-                                    }
-                                }
-                            }
-                        }
-
-                        DataAccess.UpdateClientDataWithDataReceivedFromServer(response_dto.StoredProcedure, response_dataTable);
+                        DataAccess.UpdateClientDataWithDataReceivedFromServer(response_dto.StoredProcedure, response_dataTable.RemoveExtraSlashes());
                     }
                     else
                     {
@@ -284,7 +262,7 @@ namespace sync.client
                 for (int i = 0; i < request_dataTable.Rows.Count; i++)
                 {
                     TableRow t = new TableRow();
-                    t.SynGuid = request_dataTable.Rows[i]["SyncGuid"] == DBNull.Value ? string.Empty : request_dataTable.Rows[i]["SyncGuid"].ToString();
+                    t.SyncGuid = request_dataTable.Rows[i]["SyncGuid"] == DBNull.Value ? string.Empty : request_dataTable.Rows[i]["SyncGuid"].ToString();
                     if (HasRowVersionColumn)
                     {
                         t.RowVersion = request_dataTable.Rows[i]["RowVersion"] == DBNull.Value ? string.Empty : request_dataTable.Rows[i]["RowVersion"].ToString();
@@ -342,7 +320,7 @@ namespace sync.client
                     }
                 }
 
-                request_dto.TableData = JsonConvert.SerializeObject(request_dataTable, _jsonSerializerSettings);
+                request_dto.TableData = request_dataTable.ConvertToJson();
 
                 var postTask = client.PostAsJsonAsync<DataTransferObject>(AppConfig.RequestUri, request_dto);
                 postTask.Wait();
@@ -381,7 +359,7 @@ namespace sync.client
                             return;
                         }
 
-                        response_dataTable = JSONToDataTable(dynObj, response_dataTable);
+                        response_dataTable = response_dto.TableData.ConvertToDataTable(response_dataTable);
 
                         if (response_dataTable != null && response_dataTable.Rows.Count > 0)
                         {
@@ -389,7 +367,7 @@ namespace sync.client
 
                             for (int i = 0; i < response_dataTable.Rows.Count; i++)
                             {
-                                TableRow tr = ClientTableRows.Find(t => t.SynGuid.ToLower() == response_dataTable.Rows[i]["SyncGuid"].ToString().ToLower());
+                                TableRow tr = ClientTableRows.Find(t => t.SyncGuid.ToLower() == response_dataTable.Rows[i]["SyncGuid"].ToString().ToLower());
 
                                 if (tr == null)
                                 {
@@ -417,135 +395,6 @@ namespace sync.client
                     }
                 }
             }
-        }
-
-        private DataTable JSONToDataTable(dynamic dynObj, DataTable dt_source)
-        {
-
-            foreach (var record in dynObj)
-            {
-                string cou1 = Convert.ToString(record);
-                string[] RowData = Regex.Split(cou1.Replace
-                ("{", "").Replace("}", ""), ",");
-                DataRow nr = dt_source.NewRow();
-                string RowDataString = String.Empty;
-                int idx = -1;
-                string RowColumns = String.Empty;
-                int colIndex = -1;
-
-                foreach (string rowData in RowData)
-                {
-                    try
-                    {
-                        RowDataString = String.Empty;
-                        RowColumns = String.Empty;
-                        idx = -1;
-                        colIndex = -1;
-
-                        idx = rowData.IndexOf(":");
-                        RowColumns = rowData.Substring
-                        (0, idx - 1).Replace("\"", "").Trim();
-                        RowDataString = rowData.Substring
-                        (idx + 1).Replace("\"", "");
-
-                        nr[RowColumns] = RowDataString.Trim();
-
-                        if (nr[RowColumns].ToString().ToLower() == @"null")
-                        {
-                            nr[RowColumns] = String.Empty;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        if (!String.IsNullOrEmpty(RowDataString) && RowDataString.ToLower().Contains("null"))
-                        {
-                            for (int j = 0; j < dt_source.Columns.Count; j++)
-                            {
-                                if (dt_source.Columns[j].ColumnName == RowColumns)
-                                {
-                                    colIndex = j;
-                                    break;
-                                }
-                            }
-                            if (colIndex > 0 && !String.IsNullOrEmpty(RowColumns))
-                            {
-                                if (dt_source.Columns[colIndex].DataType.FullName == "System.Decimal"
-                                    || dt_source.Columns[colIndex].DataType.FullName == "System.Double")
-                                {
-                                    nr[RowColumns] = "0.00";
-                                }
-                                else if (dt_source.Columns[colIndex].DataType.FullName == "System.Int32"
-                                    || dt_source.Columns[colIndex].DataType.FullName == "System.Int64"
-                                    || dt_source.Columns[colIndex].DataType.FullName == "System.Int16")
-                                {
-                                    nr[RowColumns] = "0";
-                                }
-                                else if (dt_source.Columns[colIndex].DataType.FullName == "System.String"
-                                    || dt_source.Columns[colIndex].DataType.FullName == "System.Char")
-                                {
-                                    nr[RowColumns] = "";
-                                }
-                                else if (dt_source.Columns[colIndex].DataType.FullName == "System.Boolean")
-                                {
-                                    nr[RowColumns] = "false";
-                                }
-
-                            }
-                        }
-                        else
-                        {
-                            continue;
-                        }
-                    }
-                }
-                dt_source.Rows.Add(nr);
-            }
-
-            return dt_source;
-        }
-
-        private string ClearSlashes(string stringValue)
-        {
-            if (IsHtml(stringValue))
-            {
-                if (stringValue.Contains(@"\n"))
-                {
-                    stringValue = stringValue.Replace(@"\n", string.Empty);
-                }
-                if (stringValue.Contains(@"\t"))
-                {
-                    stringValue = stringValue.Replace(@"\t", string.Empty);
-                }
-                if (stringValue.Contains(@"\r"))
-                {
-                    stringValue = stringValue.Replace(@"\r", string.Empty);
-                }
-
-                //should be in last
-                if (stringValue.Contains(@"=\"))
-                {
-                    stringValue = stringValue.Replace(@"\", "\"");
-                }
-            }
-            else if (stringValue.Contains(@"\\"))
-            {
-                stringValue = stringValue.Replace(@"\\", @"\");
-            }
-
-            return stringValue;
-        }
-
-        private bool IsHtml(string rowDataString)
-        {
-            if (rowDataString.Length > 0)
-            {
-                char firstChar = rowDataString.Trim()[0];
-                char lastChar = rowDataString.Trim()[rowDataString.Trim().Length - 1];
-
-                return (firstChar == '<' && lastChar == '>');
-            }
-
-            return false;
         }
     }
 }

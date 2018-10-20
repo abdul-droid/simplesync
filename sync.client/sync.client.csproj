@@ -51,7 +51,6 @@
   <ItemGroup>
     <Compile Include="AppConfig.cs" />
     <Compile Include="DataAccess.cs" />
-    <Compile Include="DataTransferObject.cs" />
     <Compile Include="ProjectInstaller.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -76,6 +75,12 @@
     <EmbeddedResource Include="ProjectInstaller.resx">
       <DependentUpon>ProjectInstaller.cs</DependentUpon>
     </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\sync.core\sync.core.csproj">
+      <Project>{42c29921-ed6e-43bf-8acd-5ad183460069}</Project>
+      <Name>sync.core</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
