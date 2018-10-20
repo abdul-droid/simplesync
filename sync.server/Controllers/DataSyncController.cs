@@ -11,14 +11,14 @@ namespace sync.server.Controller
     public class DataSyncController : ApiController
     {
         // GET api/<controller>
-        [Route("simplesync/data/sync")]
+        [Route("unity/data/sync")]
         public IEnumerable<string> Get()
         {
-            return new string[] { "If you can see this then your web api is configured properly." };
+            return new string[] { "Test", "Unity", "Data", "Sync", "If you can see this means your web api is configured properly." };
         }
 
         [HttpPost]
-        [Route("simplesync/data/sync")]
+        [Route("unity/data/sync")]
         public IHttpActionResult Process(DataTransferObject request_dto)
         {
             List<string> ByteArrayColumns = new List<string>();
