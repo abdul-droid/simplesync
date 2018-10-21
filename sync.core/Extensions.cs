@@ -2,24 +2,105 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace sync.core
 {
     public static class Extensions
     {
+        public static string MakeTextFilePath(this string FilePath, string FileName)
+        {
+            return Path.Combine(FilePath, $"{FileName}.txt");
+        }
+
+        public static List<TableRow> GetVersionedRowsFromServerResponse(this DataTable response_dataTable, List<TableRow> VersionedRows)
+        {
+            List<TableRow> VersionedRowsFromServerResponse = new List<TableRow>();
+
+            for (int i = 0; i < response_dataTable.Rows.Count; i++)
+            {
+                TableRow tr = VersionedRows.Find(t => t.SyncGuid.ToLower() == response_dataTable.Rows[i]["SyncGuid"].ToString().ToLower());
+
+                if (tr == null)
+                {
+                    continue;
+                }
+
+                VersionedRowsFromServerResponse.Add(tr);
+            }
+
+            return VersionedRowsFromServerResponse;
+        }
+
+        public static DataTable ExcludeRowVersionColumn(this DataTable DataTable)
+        {
+            for (int i = 0; i < DataTable.Columns.Count; i++)
+            {
+                if (DataTable.Columns[i].ColumnName.ToLower() == "rowversion")
+                {
+                    DataTable.Columns.Remove(DataTable.Columns[i]);
+                    break;
+                }
+            }
+
+            return DataTable;
+        }
+
+        public static Tuple<List<TableRow>, DataTable> GetVersionedRows(this DataTable DataTable)
+        {
+            List<TableRow> VersionedRows = new List<TableRow>();
+
+            bool HasRowVersionColumn = false;
+
+            for (int i = 0; i < DataTable.Columns.Count; i++)
+            {
+                if (DataTable.Columns[i].ColumnName.ToLower() == "rowversion")
+                {
+                    HasRowVersionColumn = true;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < DataTable.Rows.Count; i++)
+            {
+                TableRow t = new TableRow();
+                t.SyncGuid = DataTable.Rows[i]["SyncGuid"] == DBNull.Value ? string.Empty : DataTable.Rows[i]["SyncGuid"].ToString();
+                if (HasRowVersionColumn)
+                {
+                    t.RowVersion = DataTable.Rows[i]["RowVersion"] == DBNull.Value ? string.Empty : DataTable.Rows[i]["RowVersion"].ToString();
+                }
+                else
+                {
+                    t.RowVersion = string.Empty;
+                }
+                VersionedRows.Add(t);
+            }
+
+            for (int i = 0; i < DataTable.Columns.Count; i++)
+            {
+                if (DataTable.Columns[i].ColumnName.ToLower() == "rowversion")
+                {
+                    DataTable.Columns.Remove(DataTable.Columns[i]);
+                    break;
+                }
+            }
+
+            return new Tuple<List<TableRow>, DataTable>(VersionedRows, DataTable);
+        }
+
         public static string ConvertToJson(this DataTable DataTable)
         {
             return JsonConvert.SerializeObject(DataTable.RemoveExtraSlashes(),
                     new JsonSerializerSettings() { StringEscapeHandling = StringEscapeHandling.EscapeNonAscii });
         }
 
-        public static DataTable ConvertToDataTable(this string Data, DataTable DataTable)
+        public static DataTable ConvertToDataTable(this string Data, DataTable DataTableAsTemplate)
         {
             dynamic o = JsonConvert.DeserializeObject(Data,
                       new JsonSerializerSettings() { StringEscapeHandling = StringEscapeHandling.EscapeNonAscii });
 
-            return JsonToDataTable(o, DataTable);
+            return JsonToDataTable(o, DataTableAsTemplate);
         }
 
         public static DataTable HandleByteArrayColumns(this DataTable DataTable)
