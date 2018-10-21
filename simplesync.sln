@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sync.client", "sync.client\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "sync.server", "sync.server\sync.server.csproj", "{12AA8022-69DE-4C89-9737-1A3BF74896E7}"
 EndProject
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "sync.client.setup", "sync.client.setup\sync.client.setup.vdproj", "{6EF68B92-0C0E-40FA-B71E-46068A74735A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,8 @@ Global
 		{12AA8022-69DE-4C89-9737-1A3BF74896E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{12AA8022-69DE-4C89-9737-1A3BF74896E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{12AA8022-69DE-4C89-9737-1A3BF74896E7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6EF68B92-0C0E-40FA-B71E-46068A74735A}.Debug|Any CPU.ActiveCfg = Debug
+		{6EF68B92-0C0E-40FA-B71E-46068A74735A}.Release|Any CPU.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
