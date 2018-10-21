@@ -7,8 +7,8 @@
     <ProjectGuid>{42C29921-ED6E-43BF-8ACD-5AD183460069}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>sync.core</RootNamespace>
-    <AssemblyName>sync.core</AssemblyName>
+    <RootNamespace>Sync.Core</RootNamespace>
+    <AssemblyName>Sync.Core</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
   </PropertyGroup>
