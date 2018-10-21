@@ -1,6 +1,4 @@
-﻿
-using Newtonsoft.Json;
-using sync.core;
+﻿using sync.core;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -14,21 +12,13 @@ namespace sync.client
     public partial class SyncService : ServiceBase
     {
         private Timer _timer = null;
-        JsonSerializerSettings _jsonSerializerSettings = new JsonSerializerSettings();
-        List<TableRow> ClientTableRows;
-        List<TableRow> TableRowsFromServerResponse;
-        List<string> ByteArrayColumns;
 
         public SyncService()
         {
             InitializeComponent();
 
-            ByteArrayColumns = new List<string>();
-            ClientTableRows = new List<TableRow>();
-            TableRowsFromServerResponse = new List<TableRow>();
-            _jsonSerializerSettings.StringEscapeHandling = StringEscapeHandling.EscapeNonAscii;
-
             AppConfig.Configure();
+
             _timer = new Timer();
             _timer.Interval = AppConfig.TimerInterval;
             _timer.Elapsed += Timer_Elapsed;
@@ -36,29 +26,29 @@ namespace sync.client
 
         protected override void OnStart(string[] args)
         {
-            _timer.Enabled = true; _timer.Start();
+            _timer.Start();
         }
 
         protected override void OnStop()
         {
-            _timer.Enabled = false; _timer.Stop();
+            _timer.Stop();
         }
 
         private async void Timer_Elapsed(object sender, ElapsedEventArgs e)
         {
             try
             {
-                _timer.Enabled = false; _timer.Stop();
+                _timer.Stop();
                 await Task.Run(new Action(StartSyncServerToClient));
                 await Task.Run(new Action(StartSyncClientToServer));
             }
-            catch (Exception x)
+            catch (Exception Exception)
             {
-                AppConfig.LogErrorToTextFile(x);
+                Exception.LogErrorToTextFile();
             }
             finally
             {
-                _timer.Enabled = true; _timer.Start();
+                _timer.Start();
             }
         }
 
@@ -129,17 +119,13 @@ namespace sync.client
         {
             using (var client = new HttpClient())
             {
-                client.BaseAddress = new Uri(AppConfig.ClientBaseAddressUri);
+                var WebApi = AppConfig.WebApiUrl;
+                client.BaseAddress = new Uri(WebApi);
 
                 DataTable request_dataTable = new DataTable();
-                request_dataTable = DataAccess.GetTableStructure(request_dto.TableName);
+                request_dataTable = DataAccess.GetTableColumns(request_dto.TableName);
 
-                DateTime? LastSyncDateTime = DataAccess.GetClientDataLastUpdatedDateTime(request_dto.TableName);
-
-                if (LastSyncDateTime == null)
-                {
-                    LastSyncDateTime = DateTime.Now.AddYears(-50);
-                }
+                DateTime? LastSyncDateTime = DataAccess.GetClientDataLastUpdatedDateTime(request_dto.TableName) ?? DateTime.Now.AddYears(-50);
 
                 request_dto.SyncDateTime = Convert.ToDateTime(LastSyncDateTime);
 
@@ -148,9 +134,9 @@ namespace sync.client
                     return;
                 }
 
-                request_dto.TableData = JsonConvert.SerializeObject(request_dataTable, _jsonSerializerSettings);
+                request_dto.TableData = request_dataTable.ConvertToJson();
 
-                var postTask = client.PostAsJsonAsync(AppConfig.RequestUri, request_dto);
+                var postTask = client.PostAsJsonAsync(WebApi, request_dto);
                 postTask.Wait();
 
                 var result = postTask.Result;
@@ -167,68 +153,19 @@ namespace sync.client
                     }
 
                     DataTable response_dataTable = new DataTable();
-                    response_dataTable = DataAccess.GetTableStructure(response_dto.TableName);
+                    response_dataTable = DataAccess.GetTableColumns(response_dto.TableName);
 
-                    ByteArrayColumns.Clear();
+                    Tuple<List<string>, DataTable> tuple = response_dataTable.AddTempBinaryColumnAsString();
 
-                    for (int i = 0; i < response_dataTable.Columns.Count; i++)
-                    {
-                        if (response_dataTable.Columns[i].DataType.ToString().ToLower() == "system.byte[]")
-                        {
-                            ByteArrayColumns.Add(response_dataTable.Columns[i].ColumnName);
-                        }
-                    }
-
-                    if (ByteArrayColumns.Count > 0)
-                    {
-                        for (int i = 0; i < ByteArrayColumns.Count; i++)
-                        {
-                            response_dataTable.Columns.Add($"Temp{ByteArrayColumns[i]}", typeof(string));
-                        }
-                    }
-
-                    response_dataTable = response_dto.TableData.ConvertToDataTable(response_dataTable);
-
-                    if (ByteArrayColumns.Count > 0)
-                    {
-                        byte[] br = null;
-
-                        for (int c = 0; c < ByteArrayColumns.Count; c++)
-                        {
-                            for (int i = 0; i < response_dataTable.Rows.Count; i++)
-                            {
-                                br = null;
-
-                                br = Convert.FromBase64String(response_dataTable.Rows[i][$"Temp{ByteArrayColumns[c]}"].ToString());
-
-                                response_dataTable.Rows[i][ByteArrayColumns[c]] = (br.Length == 0) ? null : br;
-                            }
-                        }
-
-                        foreach (var c in ByteArrayColumns)
-                        {
-                            for (var i = response_dataTable.Columns.Count - 1; i >= 0; i--)
-                            {
-                                if ($"Temp{c}" == response_dataTable.Columns[i].ToString())
-                                {
-                                    response_dataTable.Columns.Remove(response_dataTable.Columns[i]);
-                                    break;
-                                }
-                            }
-                        }
-                    }
+                    response_dataTable = response_dto.TableData
+                        .ConvertToDataTable(tuple.Item2)
+                        .ConvertStringToByteArray(tuple.Item1)
+                        .RemoveExtraSlashes();
 
                     if (response_dataTable != null && response_dataTable.Rows.Count > 0)
                     {
-                        DataAccess.UpdateClientDataWithDataReceivedFromServer(response_dto.StoredProcedure, response_dataTable.RemoveExtraSlashes());
+                        DataAccess.UpdateData(response_dto.StoredProcedure, response_dataTable);
                     }
-                    else
-                    {
-                    }
-
-                }
-                else
-                {
                 }
             }
         }
@@ -237,92 +174,27 @@ namespace sync.client
         {
             using (var client = new HttpClient())
             {
-                client.BaseAddress = new Uri(AppConfig.ClientBaseAddressUri);
+                var WebApi = AppConfig.WebApiUrl;
+                client.BaseAddress = new Uri(WebApi);
 
                 DataTable request_dataTable = new DataTable();
-                request_dataTable = DataAccess.GetTableData(request_dto.TableName, request_dto.RowsToSyncPerTime);
+                request_dataTable = DataAccess.GetDataToSync(request_dto.TableName, request_dto.RowsToSyncPerTime);
 
                 if (request_dataTable == null)
                 {
                     return;
                 }
 
-                ClientTableRows.Clear();
-                bool HasRowVersionColumn = false;
+                var versionedRows = request_dataTable.GetVersionedRows();
+                request_dataTable = versionedRows.Item2;
+                List<TableRow> VersionedRows = versionedRows.Item1;
 
-                for (int i = 0; i < request_dataTable.Columns.Count; i++)
-                {
-                    if (request_dataTable.Columns[i].ColumnName == "RowVersion")
-                    {
-                        HasRowVersionColumn = true;
-                        break;
-                    }
-                }
+                request_dto.TableData = request_dataTable
+                    .HandleByteArrayColumns()
+                    .RemoveExtraSlashes()
+                    .ConvertToJson();
 
-                for (int i = 0; i < request_dataTable.Rows.Count; i++)
-                {
-                    TableRow t = new TableRow();
-                    t.SyncGuid = request_dataTable.Rows[i]["SyncGuid"] == DBNull.Value ? string.Empty : request_dataTable.Rows[i]["SyncGuid"].ToString();
-                    if (HasRowVersionColumn)
-                    {
-                        t.RowVersion = request_dataTable.Rows[i]["RowVersion"] == DBNull.Value ? string.Empty : request_dataTable.Rows[i]["RowVersion"].ToString();
-                    }
-                    else
-                    {
-                        t.RowVersion = string.Empty;
-                    }
-                    ClientTableRows.Add(t);
-                }
-
-                for (int i = 0; i < request_dataTable.Columns.Count; i++)
-                {
-                    if (request_dataTable.Columns[i].ColumnName.ToLower() == "rowversion")
-                    {
-                        request_dataTable.Columns.Remove(request_dataTable.Columns[i]);
-                        break;
-                    }
-                }
-
-                ByteArrayColumns.Clear();
-
-                for (int i = 0; i < request_dataTable.Columns.Count; i++)
-                {
-                    if (request_dataTable.Columns[i].DataType.ToString().ToLower() == "system.byte[]")
-                    {
-                        ByteArrayColumns.Add(request_dataTable.Columns[i].ColumnName);
-                    }
-                }
-
-                if (ByteArrayColumns.Count > 0)
-                {
-                    for (int i = 0; i < ByteArrayColumns.Count; i++)
-                    {
-                        request_dataTable.Columns.Add($"Temp{ByteArrayColumns[i]}", typeof(string));
-                    }
-
-                    DataTable dt = request_dataTable.Copy();
-                    for (int c = 0; c < ByteArrayColumns.Count; c++)
-                    {
-                        for (int i = 0; i < dt.Rows.Count; i++)
-                        {
-                            request_dataTable.Rows[i][$"Temp{ByteArrayColumns[c]}"] = Convert.ToBase64String((dt.Rows[i][ByteArrayColumns[c]] != DBNull.Value)
-                                ? (byte[])dt.Rows[i][ByteArrayColumns[c]]
-                                : new byte[0]);
-                        }
-                    }
-
-                    for (int c = 0; c < ByteArrayColumns.Count; c++)
-                    {
-                        for (int i = 0; i < dt.Rows.Count; i++)
-                        {
-                            request_dataTable.Rows[i][ByteArrayColumns[c]] = null;
-                        }
-                    }
-                }
-
-                request_dto.TableData = request_dataTable.ConvertToJson();
-
-                var postTask = client.PostAsJsonAsync<DataTransferObject>(AppConfig.RequestUri, request_dto);
+                var postTask = client.PostAsJsonAsync(WebApi, request_dto);
                 postTask.Wait();
 
                 if (postTask.Status == TaskStatus.RanToCompletion)
@@ -341,49 +213,12 @@ namespace sync.client
                         }
 
                         DataTable response_dataTable = new DataTable();
-                        response_dataTable = DataAccess.GetTableStructure(response_dto.TableName);
-
-                        for (int i = 0; i < response_dataTable.Columns.Count; i++)
-                        {
-                            if (response_dataTable.Columns[i].ColumnName.ToLower() == "rowversion")
-                            {
-                                response_dataTable.Columns.Remove(response_dataTable.Columns[i]);
-                                break;
-                            }
-                        }
-
-                        dynamic dynObj = JsonConvert.DeserializeObject(response_dto.TableData, _jsonSerializerSettings);
-
-                        if (dynObj == null)
-                        {
-                            return;
-                        }
-
+                        response_dataTable = DataAccess.GetTableColumns(response_dto.TableName).ExcludeRowVersionColumn();
                         response_dataTable = response_dto.TableData.ConvertToDataTable(response_dataTable);
 
                         if (response_dataTable != null && response_dataTable.Rows.Count > 0)
                         {
-                            TableRowsFromServerResponse.Clear();
-
-                            for (int i = 0; i < response_dataTable.Rows.Count; i++)
-                            {
-                                TableRow tr = ClientTableRows.Find(t => t.SyncGuid.ToLower() == response_dataTable.Rows[i]["SyncGuid"].ToString().ToLower());
-
-                                if (tr == null)
-                                {
-                                    continue;
-                                }
-
-                                TableRowsFromServerResponse.Add(tr);
-                            }
-
-                            if (TableRowsFromServerResponse.Count > 0)
-                            {
-                                if (HasRowVersionColumn)
-                                    DataAccess.FlagSynchronizedRowsUsingRowVersion(response_dto.TableName, TableRowsFromServerResponse);
-                                else
-                                    DataAccess.FlagSynchronizedRows(response_dto.TableName, TableRowsFromServerResponse);
-                            }
+                            DataAccess.FlagSynchronizedRows(response_dto.TableName, response_dataTable.GetVersionedRowsFromServerResponse(VersionedRows));
                         }
                     }
                 }
@@ -391,7 +226,7 @@ namespace sync.client
                 {
                     foreach (var exception in postTask.Exception.Flatten().InnerExceptions)
                     {
-                        AppConfig.LogErrorToTextFile(exception);
+                        exception.LogErrorToTextFile();
                     }
                 }
             }

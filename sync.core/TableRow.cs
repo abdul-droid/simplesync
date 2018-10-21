@@ -1,4 +1,4 @@
-﻿namespace sync.client
+﻿namespace sync.core
 {
     public class TableRow
     {
